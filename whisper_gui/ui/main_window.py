@@ -346,66 +346,80 @@ class WhisperGUI(QMainWindow):
         self.result_text.clear()
         self.result_text.setPlaceholderText("모델 로드 중...")
         
+        # 디버깅 메시지 출력
+        print(f"\n===== 음성 인식 시작 =====")
+        print(f"모델 파일: {self.model_file_path}")
+        print(f"오디오 파일: {audio_file}")
+        print(f"선택된 언어: {language}")
+        print(f"현재 모델 로드 상태: {self.model_loaded}")
+        
         # 이 시점에서 모델을 실제로 로드 (필요한 경우)
         if not self.model_loaded or not hasattr(self.whisper, 'ctx') or not self.whisper.ctx:
             try:
-                # 기존 모델이 있으면 먼저 해제
-                self.unload_model()
-                
                 self.progress_bar.setRange(0, 0)  # 불확정 진행 상황 모드
                 QApplication.processEvents()  # UI 업데이트
                 
+                print("모델 로드 시작...")
                 # 모델 로드
                 self.whisper.load_model(self.model_file_path)
                 self.model_loaded = True
                 
                 # 로드 성공 표시
                 self.model_path_label.setText(f"{os.path.basename(self.model_file_path)} ({self.whisper.acceleration_mode} 모드) - 로드됨")
+                print("모델 로드 완료")
             except Exception as e:
                 self.progress_bar.setRange(0, 100)
                 self.progress_bar.setValue(0)
                 self.result_text.setPlaceholderText("")
+                print(f"모델 로드 오류: {str(e)}")
                 QMessageBox.critical(self, "모델 로드 오류", str(e))
                 return
         
         # 이제 로드된 모델로 인식 시작
         self.result_text.setPlaceholderText("인식 중...")
+        print("인식 스레드 생성...")
         
         # 파일 인식 시작
         self.transcription_thread = TranscriptionThread(self.whisper, audio_file, language)
         self.transcription_thread.finished.connect(self.on_transcription_finished)
         self.transcription_thread.error.connect(self.on_transcription_error)
+        print("인식 스레드 시작...")
         self.transcription_thread.start()
+        print("인식 스레드 시작됨")
         
         # 진행 상황 표시 (실제로는 진행 상황을 알 수 없지만, 사용자에게 작업 중임을 표시)
         self.progress_bar.setRange(0, 0)  # 불확정 진행 상황 모드
     
     def on_transcription_finished(self, text):
         """인식 완료 후 처리"""
+        print(f"=== 인식 완료: 결과 텍스트 길이 = {len(text)} ===")
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(100)
         self.result_text.setPlaceholderText("")
         self.result_text.setText(text)
         
-        # 모델 초기화 (메모리 해제)
-        self.unload_model()
+        # 주의: 매번 모델을 해제하지 않도록 변경
+        # 메모리를 계속 사용하지만 다음 인식 작업이 더 빠르게 시작됨
+        # self.unload_model()
         
     def on_transcription_error(self, error_msg):
         """인식 오류 처리"""
+        print(f"=== 인식 오류: {error_msg} ===")
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.result_text.setPlaceholderText("")
         QMessageBox.critical(self, "인식 오류", error_msg)
         
-        # 오류 발생 시에도 모델 초기화
+        # 오류 발생 시에는 모델을 다시 로드해야 할 수 있으므로 해제
         self.unload_model()
         
     def unload_model(self):
         """모델을 메모리에서 해제"""
         try:
             if self.whisper and hasattr(self.whisper, 'ctx') and self.whisper.ctx:
-                self.whisper.dll.whisper_free(self.whisper.ctx)
-                self.whisper.ctx = None
+                print("모델 메모리 해제 중...")
+                # 새 free_model 메서드 사용
+                self.whisper.free_model()
                 self.model_loaded = False
                 
                 # UI 업데이트
@@ -415,7 +429,7 @@ class WhisperGUI(QMainWindow):
                 print("모델이 메모리에서 해제되었습니다.")
         except Exception as e:
             print(f"모델 해제 중 오류 발생: {str(e)}")
-    
+        
     def clear_results(self):
         """결과 지우기"""
         self.result_text.clear()
@@ -465,13 +479,7 @@ class WhisperGUI(QMainWindow):
                     print(f"임시 파일 삭제 실패: {str(e)}")
             
             # Whisper 리소스 해제
-            if self.whisper and hasattr(self.whisper, 'ctx') and self.whisper.ctx:
-                try:
-                    self.whisper.dll.whisper_free(self.whisper.ctx)
-                    self.whisper.ctx = None
-                    print("Whisper 컨텍스트가 해제되었습니다.")
-                except Exception as e:
-                    print(f"Whisper 컨텍스트 해제 실패: {str(e)}")
+            self.unload_model()
             
             print("프로그램 종료")
         except Exception as e:
