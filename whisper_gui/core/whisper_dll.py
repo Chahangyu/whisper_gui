@@ -165,6 +165,7 @@ class WhisperDLL:
             self.extra_dlls = []
             self.acceleration_mode = "CPU"  # 기본값
             self.ctx = None  # 모델 컨텍스트 초기화
+            self.current_callback = None  # 콜백 참조 저장 (가비지 컬렉션 방지)
             
             # 현재 디렉토리 경로
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -215,6 +216,9 @@ class WhisperDLL:
             
             # 메인 Whisper DLL 로드
             self.dll = ctypes.CDLL(dll_path)
+            
+            # 콜백 타입 가져오기
+            self.WHISPER_NEW_SEGMENT_CALLBACK = WHISPER_NEW_SEGMENT_CALLBACK
             
             # 함수 초기화
             if not self.initialize():
@@ -275,7 +279,7 @@ class WhisperDLL:
         except Exception as e:
             raise Exception(f"모델 파일 검사 실패: {str(e)}")
     
-    def transcribe(self, audio_data, language=None):
+    def transcribe(self, audio_data, language=None, new_segment_callback=None):
         """오디오 데이터를 텍스트로 변환합니다."""
         if not self.ctx:
             raise Exception("모델이 로드되지 않았습니다")
@@ -312,20 +316,20 @@ class WhisperDLL:
             params.beam_search.beam_size = 5    # 빔 크기
             
             # 탐지 임계값 매개변수 조정
-            params.no_speech_thold = 0.6        # 무음 임계값
+            params.no_speech_thold = 0.3        # 무음 임계값 (기본값 0.6에서 낮춤)
             params.entropy_thold = 2.0          # 엔트로피 임계값
             params.logprob_thold = -1.0         # 로그 확률 임계값
             
             # 온도 설정
             params.temperature = 0.0            # 초기 온도 (0: 그리디)
-            params.temperature_inc = 0.2        # 온도 증분
+            params.temperature_inc = 0.4        # 온도 증분 (기본값 0.2에서 높임)
             
             # 토큰 타임스탬프 임계값
             params.thold_pt = 0.01              # 토큰 타임스탬프 확률 임계값
             
             # 인쇄 옵션
             params.print_progress = True        # 진행 상황 출력
-            params.print_realtime = False       # 실시간 결과 출력 안함
+            params.print_realtime = True        # 실시간 결과 출력 활성화
             params.print_timestamps = True      # 타임스탬프 출력
             
             # 언어 지정이 있는 경우 설정
@@ -337,6 +341,12 @@ class WhisperDLL:
                 
             # 비음성 토큰 억제
             params.suppress_nst = True
+            
+            # 콜백 설정 (있는 경우)
+            if new_segment_callback:
+                self.current_callback = new_segment_callback
+                params.new_segment_callback = new_segment_callback
+                params.new_segment_callback_user_data = None
             
             # 변환 실행
             try:
@@ -402,6 +412,13 @@ class WhisperDLL:
                 text += f"{time_str} {decoded_text}\n"
         
         return text.strip()
+    
+    def get_current_segments(self):
+        """현재까지 인식된 모든 세그먼트를 가져옵니다. (실시간 업데이트용)"""
+        if not self.ctx:
+            return ""
+        
+        return self._get_transcription_result()
     
     def __del__(self):
         """객체 소멸 시 리소스 해제"""

@@ -374,11 +374,17 @@ class WhisperGUI(QMainWindow):
         # 파일 인식 시작
         self.transcription_thread = TranscriptionThread(self.whisper, audio_file, language)
         self.transcription_thread.finished.connect(self.on_transcription_finished)
+        self.transcription_thread.progress.connect(self.on_transcription_progress)  # 실시간 업데이트 연결
         self.transcription_thread.error.connect(self.on_transcription_error)
         self.transcription_thread.start()
         
         # 진행 상황 표시 (실제로는 진행 상황을 알 수 없지만, 사용자에게 작업 중임을 표시)
         self.progress_bar.setRange(0, 0)  # 불확정 진행 상황 모드
+    
+    def on_transcription_progress(self, text):
+        """인식 진행 상황 업데이트 (실시간)"""
+        self.result_text.setPlaceholderText("")
+        self.result_text.setText(text)
     
     def on_transcription_finished(self, text):
         """인식 완료 후 처리"""
