@@ -14,6 +14,7 @@ from ..core.whisper_dll import WhisperDLL
 from ..core.recording_thread import RecordingThread
 from ..core.transcription_thread import TranscriptionThread
 from ..core.utils import find_dll_file, check_required_dlls
+from ..core.model_downloader import ModelDownloader
 
 class WhisperGUI(QMainWindow):
     """Whisper 음성 인식 GUI 메인 클래스"""
@@ -52,6 +53,14 @@ class WhisperGUI(QMainWindow):
         self.recording_thread = None
         self.transcription_thread = None
         
+        # 모델 디렉토리 생성
+        self.models_dir = os.path.join(current_dir, "models")
+        if not os.path.exists(self.models_dir):
+            try:
+                os.makedirs(self.models_dir)
+            except Exception as e:
+                print(f"모델 디렉토리 생성 실패: {str(e)}")
+        
         # UI 초기화
         self.init_ui()
     
@@ -79,11 +88,17 @@ class WhisperGUI(QMainWindow):
         model_label = QLabel("Whisper 모델:")
         self.model_path_label = QLabel("모델이 로드되지 않음")
         self.model_path_label.setStyleSheet("color: red;")
+        
         load_model_btn = QPushButton("모델 로드")
         load_model_btn.clicked.connect(self.load_model)
         
+        # 모델 다운로드 버튼 추가
+        download_model_btn = QPushButton("모델 다운로드")
+        download_model_btn.clicked.connect(self.show_model_downloader)
+        
         model_layout.addWidget(model_label)
         model_layout.addWidget(self.model_path_label, 1)
+        model_layout.addWidget(download_model_btn)
         model_layout.addWidget(load_model_btn)
         main_layout.addLayout(model_layout)
         
@@ -197,6 +212,30 @@ class WhisperGUI(QMainWindow):
         button_layout.addWidget(save_btn)
         main_layout.addLayout(button_layout)
         
+    def show_model_downloader(self):
+        """모델 다운로드 다이얼로그 표시"""
+        downloader = ModelDownloader(self)
+        downloader.exec()  # 모달 대화상자로 실행
+    
+    def on_model_downloaded(self, model_path):
+        """모델이 다운로드된 후 호출되는 메서드"""
+        if not model_path or not os.path.exists(model_path):
+            return
+        
+        # 새로 다운로드된 모델을 현재 모델로 설정
+        self.model_file_path = model_path
+        self.model_path_label.setText(os.path.basename(model_path))
+        self.model_path_label.setStyleSheet("color: green;")
+        self.model_loaded = False  # 모델은 아직 메모리에 로드하지 않음
+        
+        # 버튼 활성화
+        self.record_btn.setEnabled(True)
+        self.file_btn.setEnabled(True)
+        
+        # 상태 메시지 표시
+        QMessageBox.information(self, "모델 준비 완료", 
+                                f"모델 파일이 다운로드되어 준비되었습니다.\n{os.path.basename(model_path)}")
+        
     def toggle_vulkan(self, index):
         """가속 모드 토글"""
         self.vulkan_enabled = self.vulkan_checkbox.currentData()
@@ -216,8 +255,12 @@ class WhisperGUI(QMainWindow):
             return
         
         file_dialog = QFileDialog()
+        # 기본 시작 디렉토리를 모델 폴더로 설정
+        start_dir = self.models_dir if os.path.exists(self.models_dir) else ""
+        
         model_path, _ = file_dialog.getOpenFileName(
-            self, "Whisper 모델 파일 선택", "", "모델 파일 (*.bin *.ggml *.en *.bin.* *.*);;모든 파일 (*.*)"
+            self, "Whisper 모델 파일 선택", start_dir, 
+            "모델 파일 (*.bin *.ggml *.en *.bin.* *.*);;모든 파일 (*.*)"
         )
         
         if model_path:
