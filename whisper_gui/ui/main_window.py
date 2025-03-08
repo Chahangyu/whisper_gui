@@ -404,17 +404,33 @@ class WhisperGUI(QMainWindow):
         """모델을 메모리에서 해제"""
         try:
             if self.whisper and hasattr(self.whisper, 'ctx') and self.whisper.ctx:
-                self.whisper.dll.whisper_free(self.whisper.ctx)
-                self.whisper.ctx = None
+                # Context가 유효한지 확인 후 해제
+                if self.whisper.ctx and int(self.whisper.ctx) != 0:
+                    try:
+                        self.whisper.dll.whisper_free(self.whisper.ctx)
+                        self.whisper.ctx = None
+                        print("모델 컨텍스트가 해제되었습니다.")
+                    except Exception as e:
+                        print(f"whisper_free 호출 중 오류: {str(e)}")
+                else:
+                    self.whisper.ctx = None
+                
                 self.model_loaded = False
                 
                 # UI 업데이트
                 if self.model_file_path:
                     self.model_path_label.setText(f"{os.path.basename(self.model_file_path)} - 준비됨 (메모리 해제됨)")
                 
+                # GC 요청 (명시적인 가비지 컬렉션 실행)
+                import gc
+                gc.collect()
+                
                 print("모델이 메모리에서 해제되었습니다.")
         except Exception as e:
             print(f"모델 해제 중 오류 발생: {str(e)}")
+            if self.whisper:
+                self.whisper.ctx = None
+            self.model_loaded = False  # 오류가 났더라도 모델 상태를 비로드 상태로 설정
     
     def clear_results(self):
         """결과 지우기"""
@@ -465,13 +481,23 @@ class WhisperGUI(QMainWindow):
                     print(f"임시 파일 삭제 실패: {str(e)}")
             
             # Whisper 리소스 해제
-            if self.whisper and hasattr(self.whisper, 'ctx') and self.whisper.ctx:
-                try:
-                    self.whisper.dll.whisper_free(self.whisper.ctx)
-                    self.whisper.ctx = None
-                    print("Whisper 컨텍스트가 해제되었습니다.")
-                except Exception as e:
-                    print(f"Whisper 컨텍스트 해제 실패: {str(e)}")
+            if self.whisper:
+                if hasattr(self.whisper, 'ctx') and self.whisper.ctx:
+                    try:
+                        # int 체크를 통해 유효한 포인터인지 확인
+                        if int(self.whisper.ctx) != 0:
+                            self.whisper.dll.whisper_free(self.whisper.ctx)
+                        self.whisper.ctx = None
+                        print("Whisper 컨텍스트가 해제되었습니다.")
+                    except Exception as e:
+                        print(f"Whisper 컨텍스트 해제 실패: {str(e)}")
+                
+                # 명시적으로 객체 삭제
+                self.whisper = None
+            
+            # 명시적인 가비지 컬렉션 요청
+            import gc
+            gc.collect()
             
             print("프로그램 종료")
         except Exception as e:
