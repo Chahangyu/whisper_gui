@@ -80,7 +80,7 @@ class WhisperGUI(QMainWindow):
         # 타이틀 라벨
         title_label = QLabel("Whisper 다국어 음성 인식 프로그램")
         title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         main_layout.addWidget(title_label)
         
         # 모델 섹션
@@ -185,6 +185,8 @@ class WhisperGUI(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")  # 퍼센트 표시 포맷 설정
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignRight)  # 텍스트 가운데 정렬
         main_layout.addWidget(self.progress_bar)
         
         # 결과 텍스트 영역
@@ -266,7 +268,7 @@ class WhisperGUI(QMainWindow):
         if model_path:
             try:
                 self.progress_bar.setRange(0, 0)  # 진행 상황 표시
-                self.progress_bar.setFormat("모델 확인 중...")
+                self.progress_bar.setFormat("모델 확인 중... %p%")
                 QApplication.processEvents()  # UI 업데이트
                 
                 # 현재 Vulkan 설정으로 새 WhisperDLL 인스턴스 생성
@@ -417,36 +419,45 @@ class WhisperGUI(QMainWindow):
         # 파일 인식 시작
         self.transcription_thread = TranscriptionThread(self.whisper, audio_file, language)
         self.transcription_thread.finished.connect(self.on_transcription_finished)
-        self.transcription_thread.progress.connect(self.on_transcription_progress)  # 실시간 업데이트 연결
+        self.transcription_thread.progress.connect(self.on_transcription_progress)  # 실시간 텍스트 업데이트 연결
+        self.transcription_thread.progress_percent.connect(self.update_transcription_progress)  # 진행률 업데이트 연결
         self.transcription_thread.error.connect(self.on_transcription_error)
         self.transcription_thread.start()
         
-        # 진행 상황 표시 (실제로는 진행 상황을 알 수 없지만, 사용자에게 작업 중임을 표시)
-        self.progress_bar.setRange(0, 0)  # 불확정 진행 상황 모드
+        # 진행 상황 표시 - 0-100% 범위로 설정
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("인식 중... %p%")
     
     def on_transcription_progress(self, text):
-        """인식 진행 상황 업데이트 (실시간)"""
+        """인식 진행 상황 텍스트 업데이트 (실시간)"""
         self.result_text.setPlaceholderText("")
         self.result_text.setText(text)
-    
+
+    def update_transcription_progress(self, percent):
+        """인식 진행률 업데이트 (실시간)"""
+        self.progress_bar.setValue(percent)
+        if percent < 100:
+            self.progress_bar.setFormat(f"인식 중... %p%")
+        else:
+            self.progress_bar.setFormat("%p%")
+
     def on_transcription_finished(self, text):
         """인식 완료 후 처리"""
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(100)
+        self.progress_bar.setFormat("%p%")  # 완료시 퍼센트 표시로 복귀
         self.result_text.setPlaceholderText("")
         self.result_text.setText(text)
-        
-        # 주의: 매번 모델을 해제하지 않도록 변경
-        # 메모리를 계속 사용하지만 다음 인식 작업이 더 빠르게 시작됨
         
     def on_transcription_error(self, error_msg):
         """인식 오류 처리"""
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")  # 오류 발생 시 퍼센트 표시로 복귀
         self.result_text.setPlaceholderText("")
         QMessageBox.critical(self, "인식 오류", error_msg)
         
-        # 오류 발생 시에는 모델을 다시 로드해야 할 수 있으므로 해제
         self.unload_model()
         
     def unload_model(self):

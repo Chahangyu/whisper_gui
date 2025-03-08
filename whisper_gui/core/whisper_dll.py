@@ -342,6 +342,9 @@ class WhisperDLL:
             # 비음성 토큰 억제
             params.suppress_nst = True
             
+            # 화자 전환 감지 활성화
+            params.tdrz_enable = True
+            
             # 콜백 설정 (있는 경우)
             if new_segment_callback:
                 self.current_callback = new_segment_callback

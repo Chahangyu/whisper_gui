@@ -94,6 +94,8 @@ class ModelDownloader(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("%p%")  # 퍼센트 표시 포맷 설정
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignRight)  # 텍스트 가운데 정렬
         layout.addWidget(self.progress_bar)
         
         # 버튼
