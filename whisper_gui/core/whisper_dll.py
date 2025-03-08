@@ -312,13 +312,13 @@ class WhisperDLL:
             params.beam_search.beam_size = 5    # 빔 크기
             
             # 탐지 임계값 매개변수 조정
-            params.no_speech_thold = 0.3        # 무음 임계값 (기본값 0.6에서 낮춤)
+            params.no_speech_thold = 0.6        # 무음 임계값
             params.entropy_thold = 2.0          # 엔트로피 임계값
             params.logprob_thold = -1.0         # 로그 확률 임계값
             
             # 온도 설정
             params.temperature = 0.0            # 초기 온도 (0: 그리디)
-            params.temperature_inc = 0.4        # 온도 증분 (기본값 0.2에서 높임)
+            params.temperature_inc = 0.2        # 온도 증분
             
             # 토큰 타임스탬프 임계값
             params.thold_pt = 0.01              # 토큰 타임스탬프 확률 임계값
@@ -375,9 +375,31 @@ class WhisperDLL:
         
         for i in range(n_segments):
             segment_text = self.dll.whisper_full_get_segment_text(self.ctx, i)
+            
+            # 세그먼트의 시작 및 종료 시간 가져오기
+            t0 = self.dll.whisper_full_get_segment_t0(self.ctx, i)
+            t1 = self.dll.whisper_full_get_segment_t1(self.ctx, i)
+            
+            # whisper에서는 시간 값이 10ms 단위로 반환됨
+            # 밀리초를 초로 변환 (10ms 단위의 값을 초 단위로)
+            t0_sec = t0 // 100
+            t1_sec = t1 // 100
+            
+            # 시, 분, 초 계산
+            t0_hour = t0_sec // 3600
+            t0_min = (t0_sec % 3600) // 60
+            t0_sec = t0_sec % 60
+            
+            t1_hour = t1_sec // 3600
+            t1_min = (t1_sec % 3600) // 60
+            t1_sec = t1_sec % 60
+            
+            # 시간 형식 문자열 생성
+            time_str = f"{t0_hour:02d}:{t0_min:02d}:{t0_sec:02d} -> {t1_hour:02d}:{t1_min:02d}:{t1_sec:02d}"
+            
             if segment_text:
                 decoded_text = segment_text.decode('utf-8', errors='replace')
-                text += decoded_text + " "
+                text += f"{time_str} {decoded_text}\n"
         
         return text.strip()
     
@@ -422,6 +444,13 @@ class WhisperDLL:
             
             self.dll.whisper_full_get_segment_text.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.dll.whisper_full_get_segment_text.restype = ctypes.c_char_p
+            
+            # 타임스탬프 관련 함수 추가
+            self.dll.whisper_full_get_segment_t0.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            self.dll.whisper_full_get_segment_t0.restype = ctypes.c_int64
+            
+            self.dll.whisper_full_get_segment_t1.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            self.dll.whisper_full_get_segment_t1.restype = ctypes.c_int64
             
             return True
         except Exception as e:
