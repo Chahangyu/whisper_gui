@@ -148,7 +148,6 @@ class WhisperGUI(QMainWindow):
         
         # 주요 언어 추가
         languages = [
-            ("자동 감지", "auto"),
             ("한국어", "ko"),
             ("영어", "en"),
             ("일본어", "ja"),
@@ -383,8 +382,6 @@ class WhisperGUI(QMainWindow):
         
         # 선택된 언어 가져오기
         language = self.language_combo.currentData()
-        if language == "auto":
-            language = None
         
         # UI 업데이트
         self.progress_bar.setValue(0)
