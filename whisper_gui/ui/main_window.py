@@ -245,6 +245,11 @@ class WhisperGUI(QMainWindow):
     
     def on_device_selected(self, use_gpu):
         """장치 선택 결과 처리"""
+        # 기존 모델이 메모리에 로드되어 있는 경우 먼저 해제
+        if self.model_loaded and self.whisper:
+            self.statusBar().showMessage("가속 모드 변경으로 인해 기존 모델을 메모리에서 해제하는 중...")
+            self.unload_model()
+            
         # Vulkan 설정 저장
         self.vulkan_enabled = use_gpu
         
@@ -285,6 +290,11 @@ class WhisperGUI(QMainWindow):
     
     def on_model_selected(self, model_path):
         """모델 선택 결과 처리"""
+        # 기존 모델이 메모리에 로드되어 있는 경우 먼저 해제
+        if self.model_loaded and self.whisper and hasattr(self.whisper, 'ctx') and self.whisper.ctx:
+            self.statusBar().showMessage("기존 모델을 메모리에서 해제하는 중...")
+            self.unload_model()
+            
         # 모델 경로 저장
         self.model_file_path = model_path
         
@@ -403,7 +413,8 @@ class WhisperGUI(QMainWindow):
         if not self.model_loaded or not hasattr(self.whisper, 'ctx') or not self.whisper.ctx:
             try:
                 # 기존 모델이 있으면 먼저 해제
-                self.unload_model()
+                if self.model_loaded:
+                    self.unload_model()
                 
                 progress_bar.setRange(0, 0)  # 불확정 진행 상황 모드
                 QApplication.processEvents()  # UI 업데이트
@@ -471,15 +482,21 @@ class WhisperGUI(QMainWindow):
         """모델을 메모리에서 해제"""
         try:
             if self.whisper and hasattr(self.whisper, 'ctx') and self.whisper.ctx:
+                print("모델 메모리 해제 시작")
                 # 새 free_model 메서드 사용
-                self.whisper.free_model()
+                result = self.whisper.free_model()
                 self.model_loaded = False
                 
                 # UI 업데이트
                 if self.model_file_path:
                     self.model_path_label.setText(f"{os.path.basename(self.model_file_path)} - 준비됨 (메모리 해제됨)")
-        except Exception:
-            pass
+                    
+                print(f"모델 메모리 해제 완료: {result}")
+                return result
+            return True
+        except Exception as e:
+            print(f"모델 해제 중 오류 발생: {str(e)}")
+            return False
         
     def clear_results(self):
         """결과 지우기"""
