@@ -50,6 +50,13 @@ class ModelDownloader(QDialog):
         self.app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.models_dir = os.path.join(self.app_root, "models")
         
+        # 부모에게서 models_dir 상속 (일관성 유지)
+        if parent and hasattr(parent, 'models_dir'):
+            self.models_dir = parent.models_dir
+            print(f"부모로부터 모델 디렉토리 경로 상속: {self.models_dir}")
+        else:
+            print(f"기본 모델 디렉토리 사용: {self.models_dir}")
+        
         # 다운로드 중인지 여부
         self.is_downloading = False
         self.download_thread = None

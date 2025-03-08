@@ -14,9 +14,15 @@ def main():
     """
     try:
         app = QApplication(sys.argv)
+        
+        # 어플리케이션 스타일 설정
+        app.setStyle("Fusion")  # 모던 스타일 적용
+        
+        # 메인 윈도우 생성 및 표시
         window = WhisperGUI()
         window.show()
-        sys.exit(app.exec())  # PyQt6에서는 app.exec_() 대신 app.exec()를 사용
+        
+        sys.exit(app.exec())
     except Exception as e:
         print(f"프로그램 실행 중 오류 발생: {str(e)}")
         traceback.print_exc()
