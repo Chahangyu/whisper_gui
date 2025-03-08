@@ -206,16 +206,14 @@ class WhisperDLL:
                     try:
                         ggml_dll = ctypes.CDLL(dll_path_full)
                         self.extra_dlls.append(ggml_dll)
-                        print(f"{dll_name} 로드 성공")
                         
                         # 가속 모드 설정
                         if dll_name == "ggml-vulkan.dll" and vulkan_support:
                             self.acceleration_mode = "Vulkan GPU"
-                    except Exception as e:
-                        print(f"경고: {dll_name} 로드 실패: {str(e)}")
+                    except Exception:
+                        pass
             
             # 메인 Whisper DLL 로드
-            print(f"whisper dll 로드 경로: {dll_path}")
             self.dll = ctypes.CDLL(dll_path)
             
             # 함수 초기화
@@ -223,8 +221,7 @@ class WhisperDLL:
                 raise Exception("DLL 함수 초기화 실패")
                 
         except Exception as e:
-            print(f"WhisperDLL 초기화 실패: {str(e)}")
-            raise
+            raise Exception(f"WhisperDLL 초기화 실패: {str(e)}")
     
     def load_model(self, model_path):
         """Whisper 모델을 로드합니다."""
@@ -236,24 +233,18 @@ class WhisperDLL:
             if not os.path.exists(model_path):
                 raise Exception(f"모델 파일이 존재하지 않습니다: {model_path}")
             
-            print(f"모델 파일 로드 시도: {model_path}")
-            
             # 파일 경로를 바이트로 인코딩
             model_path_bytes = model_path.encode('utf-8')
             
             # 모델 로드 시도 (whisper_init_from_file 사용)
-            print("whisper_init_from_file 호출 중...")
             self.ctx = self.dll.whisper_init_from_file(model_path_bytes)
-            print(f"whisper_init_from_file 호출 후, ctx = {self.ctx}")
             
             # 로드 실패 시
             if not self.ctx or self.ctx == 0:
                 raise Exception("모델 초기화 실패: whisper_init_from_file이 null을 반환했습니다")
             
-            print("모델 로드 성공")
             return True
         except Exception as e:
-            print(f"모델 로드 오류: {str(e)}")
             self.free_model()  # 오류 발생 시 모델 해제
             raise Exception(f"모델 로드 실패: {str(e)}")
     
@@ -261,13 +252,10 @@ class WhisperDLL:
         """모델을 메모리에서 해제합니다."""
         if hasattr(self, 'ctx') and self.ctx:
             try:
-                print(f"모델 메모리 해제 중... ctx={self.ctx}")
                 self.dll.whisper_free(self.ctx)
                 self.ctx = None
-                print("모델이 메모리에서 해제되었습니다.")
                 return True
-            except Exception as e:
-                print(f"모델 해제 중 오류 발생: {str(e)}")
+            except Exception:
                 return False
         return True
             
@@ -283,12 +271,8 @@ class WhisperDLL:
             if file_size < 1024:  # 1KB 미만은 유효한 모델 파일이 아닐 가능성이 높음
                 raise Exception(f"모델 파일이 너무 작습니다 ({file_size} bytes). 손상된 파일일 수 있습니다.")
             
-            print(f"모델 파일 확인: {model_path} ({file_size/1024/1024:.2f} MB)")
-            
-            # 모델 파일이 유효하다고 판단
             return True
         except Exception as e:
-            print(f"모델 검사 오류: {str(e)}")
             raise Exception(f"모델 파일 검사 실패: {str(e)}")
     
     def transcribe(self, audio_data, language=None):
@@ -297,7 +281,6 @@ class WhisperDLL:
             raise Exception("모델이 로드되지 않았습니다")
         
         try:
-            print(f"transcribe 호출됨: audio_length={len(audio_data)}, language={language}")
             # 오디오 데이터를 float32 배열로 변환
             audio_float = audio_data.astype(np.float32)
             
@@ -305,35 +288,27 @@ class WhisperDLL:
             audio_ptr = audio_float.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
             
             # 기본 파라미터 가져오기
-            print("whisper_full_default_params_by_ref 호출 중...")
             params = WhisperFullParams()
             
             try:
-                # whisper.dll.exports.txt를 확인하여 정확한 함수 형식 확인
+                # 전략 매개변수가 있는 버전 시도
                 try:
-                    # 전략 매개변수가 있는 버전 시도
                     self.dll.whisper_full_default_params_by_ref(ctypes.byref(params), WhisperSamplingStrategy.WHISPER_SAMPLING_GREEDY)
-                    print("whisper_full_default_params_by_ref 성공 (with strategy)")
-                except Exception as e:
-                    print(f"whisper_full_default_params_by_ref (with strategy) 실패: {e}")
+                except Exception:
                     # 매개변수 없는 버전 시도
                     self.dll.whisper_full_default_params_by_ref(ctypes.byref(params))
-                    print("whisper_full_default_params_by_ref 성공 (no strategy)")
-            except Exception as e:
-                print(f"모든 whisper_full_default_params_by_ref 시도 실패: {e}")
+            except Exception:
                 # 다른 방법 시도: 포인터 기반 방식
-                print("whisper_full_default_params 시도 중...")
                 params_ptr = self.dll.whisper_full_default_params()
                 if not params_ptr:
                     raise Exception("whisper_full_default_params가 NULL을 반환했습니다")
-                print(f"whisper_full_default_params 성공, ptr = {params_ptr}")
                 return self._transcribe_with_ptr(audio_float, audio_ptr, params_ptr, language)
             
             # 최적의 매개변수 설정
             params.n_threads = 4                # 스레드 수
             params.audio_ctx = 0                # 오디오 컨텍스트 크기 (0: 전체)
             params.max_len = 0                  # 최대 세그먼트 길이 (0: 제한 없음)
-            params.best_of = 5                  # 후보 샘플링 수
+            params.greedy.best_of = 5           # 후보 샘플링 수
             params.beam_search.beam_size = 5    # 빔 크기
             
             # 탐지 임계값 매개변수 조정
@@ -355,27 +330,19 @@ class WhisperDLL:
             
             # 언어 지정이 있는 경우 설정
             if language:
-                print(f"언어 설정: {language}")
                 params.language = language.encode('utf-8')
                 params.detect_language = False
             else:
                 params.detect_language = True
                 
             # 비음성 토큰 억제
-            params.suppress_non_speech_tokens = True
+            params.suppress_nst = True
             
             # 변환 실행
-            print(f"오디오 변환 시작 (길이: {len(audio_float)} 샘플)")
-            print(f"whisper_full 호출 중... ctx={self.ctx}, params=<구조체>, audio_ptr={audio_ptr}, len={len(audio_float)}")
-            
             try:
                 result = self.dll.whisper_full(self.ctx, ctypes.byref(params), audio_ptr, len(audio_float))
-                print(f"whisper_full 결과 코드: {result}")
             except Exception as e:
-                print(f"whisper_full 호출 중 예외 발생: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                raise
+                raise Exception(f"whisper_full 호출 중 예외 발생: {str(e)}")
             
             if result != 0:
                 raise Exception(f"오디오 변환 실패: 코드 {result}")
@@ -384,18 +351,13 @@ class WhisperDLL:
             return self._get_transcription_result()
             
         except Exception as e:
-            print(f"변환 오류: {str(e)}")
-            raise
+            raise Exception(f"변환 오류: {str(e)}")
     
     def _transcribe_with_ptr(self, audio_float, audio_ptr, params_ptr, language=None):
         """포인터 기반 방식으로 변환 (whisper_full_default_params_by_ref가 실패할 경우)"""
         try:
-            print(f"_transcribe_with_ptr 호출: params_ptr={params_ptr}")
-            
             # 변환 실행
-            print(f"whisper_full (포인터 방식) 호출 중... ctx={self.ctx}")
             result = self.dll.whisper_full(self.ctx, params_ptr, audio_ptr, len(audio_float))
-            print(f"whisper_full 결과 코드: {result}")
             
             if result != 0:
                 raise Exception(f"오디오 변환 실패: 코드 {result}")
@@ -404,34 +366,27 @@ class WhisperDLL:
             return self._get_transcription_result()
             
         except Exception as e:
-            print(f"_transcribe_with_ptr 오류: {str(e)}")
-            raise
+            raise Exception(f"변환 오류: {str(e)}")
     
     def _get_transcription_result(self):
         """변환 결과 텍스트를 가져옵니다."""
         text = ""
-        print("whisper_full_n_segments 호출 중...")
         n_segments = self.dll.whisper_full_n_segments(self.ctx)
-        print(f"인식된 세그먼트 수: {n_segments}")
         
         for i in range(n_segments):
-            print(f"세그먼트 {i} 텍스트 가져오는 중...")
             segment_text = self.dll.whisper_full_get_segment_text(self.ctx, i)
             if segment_text:
                 decoded_text = segment_text.decode('utf-8', errors='replace')
-                print(f"세그먼트 {i} 텍스트: {decoded_text}")
                 text += decoded_text + " "
         
-        print(f"최종 변환 텍스트: {text.strip()}")
         return text.strip()
     
     def __del__(self):
         """객체 소멸 시 리소스 해제"""
         try:
             self.free_model()
-            print("WhisperDLL 리소스가 해제되었습니다.")
-        except Exception as e:
-            print(f"WhisperDLL 리소스 해제 중 오류 발생: {str(e)}")
+        except Exception:
+            pass
             
     def initialize(self):
         """DLL 함수 초기화 및 설정"""
@@ -448,8 +403,7 @@ class WhisperDLL:
             try:
                 self.dll.whisper_full_default_params_by_ref.argtypes = [ctypes.POINTER(WhisperFullParams), ctypes.c_int]
                 self.dll.whisper_full_default_params_by_ref.restype = None
-            except Exception as e:
-                print(f"whisper_full_default_params_by_ref (with strategy) 정의 실패: {e}")
+            except Exception:
                 # 매개변수 없는 버전 시도
                 self.dll.whisper_full_default_params_by_ref.argtypes = [ctypes.POINTER(WhisperFullParams)]
                 self.dll.whisper_full_default_params_by_ref.restype = None
@@ -469,8 +423,6 @@ class WhisperDLL:
             self.dll.whisper_full_get_segment_text.argtypes = [ctypes.c_void_p, ctypes.c_int]
             self.dll.whisper_full_get_segment_text.restype = ctypes.c_char_p
             
-            print("Whisper DLL 함수가 초기화되었습니다.")
             return True
         except Exception as e:
-            print(f"Whisper DLL 함수 초기화 실패: {str(e)}")
-            return False
+            raise Exception(f"Whisper DLL 함수 초기화 실패: {str(e)}")
