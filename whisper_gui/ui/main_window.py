@@ -450,6 +450,11 @@ class WhisperGUI(QMainWindow):
         """인식 진행 상황 텍스트 업데이트 (실시간)"""
         self.result_text.setPlaceholderText("")
         self.result_text.setText(text)
+        
+        # 스크롤을 텍스트 끝으로 이동
+        cursor = self.result_text.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.result_text.setTextCursor(cursor)
 
     def on_transcription_finished(self, text):
         """인식 완료 후 처리"""

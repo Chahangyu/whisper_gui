@@ -316,13 +316,13 @@ class WhisperDLL:
             params.beam_search.beam_size = 5    # 빔 크기
             
             # 탐지 임계값 매개변수 조정
-            params.no_speech_thold = 0.3        # 무음 임계값 (기본값 0.6에서 낮춤)
+            params.no_speech_thold = 0.6        # 무음 임계값 (기본값 0.6에서 낮춤)
             params.entropy_thold = 2.0          # 엔트로피 임계값
             params.logprob_thold = -1.0         # 로그 확률 임계값
             
             # 온도 설정
             params.temperature = 0.0            # 초기 온도 (0: 그리디)
-            params.temperature_inc = 0.4        # 온도 증분 (기본값 0.2에서 높임)
+            params.temperature_inc = 0.2        # 온도 증분 (기본값 0.2에서 높임)
             
             # 토큰 타임스탬프 임계값
             params.thold_pt = 0.01              # 토큰 타임스탬프 확률 임계값
@@ -338,7 +338,9 @@ class WhisperDLL:
                 params.detect_language = False
             else:
                 params.detect_language = True
-                
+            
+            params.suppress_blank = True
+            
             # 비음성 토큰 억제
             params.suppress_nst = True
             
